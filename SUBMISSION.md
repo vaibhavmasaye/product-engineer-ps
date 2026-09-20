@@ -129,7 +129,7 @@ npm run build  # Runs tsc --noEmit; checks source and test types without generat
 npm test
 ```
 
-Executes 33 automated, deterministic tests across AC1–AC5, classification matrices, state machines, single- and multi-connection concurrency locks, configuration validation, transport rejection handling, and crash recovery in ~240ms with zero network calls and zero real-time sleeps.
+Executes 34 automated, deterministic tests across AC1–AC5, classification matrices, state machines, single- and multi-connection concurrency locks, configuration validation, live HTTP delivery, transport rejection handling, and crash recovery in ~240ms with zero paid external services.
 
 ---
 
@@ -204,7 +204,7 @@ Executes 33 automated, deterministic tests across AC1–AC5, classification matr
    - *Rationale:* Application-level checks (`if (!exists) insert()`) suffer from race conditions under concurrent submissions. Relying on the database constraint guarantees strict atomicity and mutual exclusion without distributed locking complexity.
 2. **Injectable Time & Transport Abstractions (`Clock` and `HttpTransport`):**
    - *Decision:* All time-dependent scheduling and network transport depend on `Clock` (`SystemClock` / `MockClock`) and `HttpTransport` (`RealHttpTransport` / `FakeHttpTransport`).
-   - *Rationale:* Eliminates flaky test sleep delays. The entire 33-test suite executes in ~240ms while verifying realistic exponential backoff, retry boundaries, transport exceptions, network errors, and claims across separate SQLite connections.
+   - *Rationale:* Eliminates flaky test sleep delays. The entire 34-test suite executes in ~325ms while verifying realistic exponential backoff, retry boundaries, live HTTP behavior, transport exceptions, network errors, and claims across separate SQLite connections.
 3. **Crash recovery with stranded `PROCESSING` reclamation:**
    - *Decision:* On startup, the service runs `recoverStrandedProcessingEvents()`, safely transitioning stranded `PROCESSING` records back to `QUEUED`.
    - *Rationale:* If the worker process crashes during an HTTP flight, delivery is safely resumed under at-least-once semantics. Attempt insertion and the resulting state transition are committed atomically, while stranded `RECEIVED` and `PROCESSING` records are re-queued on startup.
