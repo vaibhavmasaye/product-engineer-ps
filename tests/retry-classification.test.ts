@@ -33,15 +33,15 @@ test('RetryClassifier: 5xx server errors are RETRYABLE', () => {
 
 test('RetryClassifier: Network-level errors are RETRYABLE', () => {
   const errRefused = new Error('connect ECONNREFUSED 127.0.0.1:3001');
-  (errRefused as any).code = 'ECONNREFUSED';
+  Object.assign(errRefused, { code: 'ECONNREFUSED' });
   assert.strictEqual(RetryClassifier.classify(null, errRefused), Outcome.RETRYABLE);
 
   const errReset = new Error('read ECONNRESET');
-  (errReset as any).code = 'ECONNRESET';
+  Object.assign(errReset, { code: 'ECONNRESET' });
   assert.strictEqual(RetryClassifier.classify(null, errReset), Outcome.RETRYABLE);
 
   const errDns = new Error('getaddrinfo ENOTFOUND api.incident.local');
-  (errDns as any).code = 'ENOTFOUND';
+  Object.assign(errDns, { code: 'ENOTFOUND' });
   assert.strictEqual(RetryClassifier.classify(null, errDns), Outcome.RETRYABLE);
 
   const errTimeout = new Error('The operation timed out');

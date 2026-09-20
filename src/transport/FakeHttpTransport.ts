@@ -1,8 +1,9 @@
+import type { CreateEventInput } from '../repositories/EventRepository.ts';
 import type { HttpTransport, HttpDeliveryResult } from './HttpTransport.ts';
 
 export interface RecordedCall {
   url: string;
-  payload: any;
+  payload: CreateEventInput;
   time: Date;
 }
 
@@ -32,7 +33,7 @@ export class FakeHttpTransport implements HttpTransport {
     };
   }
 
-  async deliver(url: string, payload: any): Promise<HttpDeliveryResult> {
+  async deliver(url: string, payload: CreateEventInput): Promise<HttpDeliveryResult> {
     this.calls.push({
       url,
       payload,

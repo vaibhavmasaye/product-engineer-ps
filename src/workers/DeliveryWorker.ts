@@ -44,6 +44,15 @@ export class DeliveryWorker {
       return false; // No work available right now
     }
 
+    const attemptNumber = this.attemptRepository.nextAttemptNumber(event.eventId);
+    if (attemptNumber > this.policy.getMaxAttempts()) {
+      event.state = EventState.FAILED;
+      event.nextRetryAt = null;
+      event.updatedAt = this.clock.now().toISOString();
+      this.eventRepository.save(event);
+      return true;
+    }
+
     const startTime = this.clock.now();
 
     // Minimum event contract payload to deliver
@@ -62,27 +71,13 @@ export class DeliveryWorker {
     const outcome = RetryClassifier.classify(result.statusCode, result.error);
 
     // Record immutable attempt
-    const attemptNumber = this.attemptRepository.nextAttemptNumber(event.eventId);
     let errorDesc: string | null = null;
     if (result.error) {
-      errorDesc = (result.error as any).code || result.error.message;
+      errorDesc = ('code' in result.error && typeof result.error.code === 'string')
+        ? result.error.code : result.error.message;
     } else if (result.statusCode && result.statusCode >= 400) {
       errorDesc = `HTTP_${result.statusCode}`;
     }
-
-    this.attemptRepository.create(
-      {
-        eventId: event.eventId,
-        attempt_number: attemptNumber,
-        started_at: startTime.toISOString(),
-        completed_at: endTime.toISOString(),
-        http_status_code: result.statusCode,
-        error_type: errorDesc,
-        outcome,
-        response_body: result.body ? result.body.slice(0, 1000) : null,
-      },
-      endTime
-    );
 
     // State machine updates
     if (outcome === Outcome.SUCCESS) {
@@ -103,7 +98,17 @@ export class DeliveryWorker {
     }
 
     event.updatedAt = endTime.toISOString();
-    this.eventRepository.save(event);
+    this.attemptRepository.createAndSaveEvent(
+      {
+        eventId: event.eventId,
+        attempt_number: attemptNumber,
+        started_at: startTime.toISOString(),
+        completed_at: endTime.toISOString(),
+        http_status_code: result.statusCode,
+        error_type: errorDesc,
+        outcome,
+        response_body: result.body ? result.body.slice(0, 1000) : null,
+      }, event, endTime);
 
     return true;
   }

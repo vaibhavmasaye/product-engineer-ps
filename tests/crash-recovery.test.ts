@@ -114,3 +114,15 @@ test('Crash Recovery: Stranded PROCESSING event survives process crash and is re
   }
 });
 
+test('Crash Recovery: Stranded RECEIVED event is re-queued on restart', async () => {
+  const db = new Database({ dbPath: ':memory:' });
+  const repo = new EventRepository(db);
+  const service = new EventService(repo, new MockClock());
+  await service.ingest({ eventId: 'evt_received_recovery', type: 'incident.created',
+    occurredAt: '2026-09-17T10:00:00.000Z', payload: {} });
+  // Simulate a crash between durable ingestion and RECEIVED -> QUEUED transition.
+  repo.save({ ...repo.getByEventId('evt_received_recovery')!, state: EventState.RECEIVED });
+  assert.equal(repo.recoverStrandedProcessingEvents(), 1);
+  assert.equal(repo.getByEventId('evt_received_recovery')?.state, EventState.QUEUED);
+  db.close();
+});

@@ -1,3 +1,4 @@
+import { type DatabaseRow, textColumn, nullableTextColumn, enumColumn } from '../database/row.ts';
 import * as crypto from 'node:crypto';
 import { Database, getDatabase } from '../database/index.ts';
 import { type Event, EventState } from '../entities/Event.ts';
@@ -6,7 +7,7 @@ export interface CreateEventInput {
   eventId: string;
   type: string;
   occurredAt: string;
-  payload: Record<string, any>;
+  payload: Record<string, unknown>;
 }
 
 export class EventRepository {
@@ -41,7 +42,7 @@ export class EventRepository {
 
       const created = Number(result.changes) > 0;
       const selectStmt = this.db.prepare('SELECT * FROM events WHERE eventId = ?');
-      const row = selectStmt.get(input.eventId) as any;
+      const row = selectStmt.get(input.eventId);
 
       if (!row) {
         throw new Error(`Failed to retrieve event for eventId: ${input.eventId}`);
@@ -56,13 +57,13 @@ export class EventRepository {
 
   getByEventId(eventId: string): Event | null {
     const stmt = this.db.prepare('SELECT * FROM events WHERE eventId = ?');
-    const row = stmt.get(eventId) as any;
+    const row = stmt.get(eventId);
     return row ? this.mapRowToEvent(row) : null;
   }
 
   getById(id: string): Event | null {
     const stmt = this.db.prepare('SELECT * FROM events WHERE id = ?');
-    const row = stmt.get(id) as any;
+    const row = stmt.get(id);
     return row ? this.mapRowToEvent(row) : null;
   }
 
@@ -95,7 +96,7 @@ export class EventRepository {
         ORDER BY createdAt ASC
         LIMIT 1
       `);
-      const row = findStmt.get(EventState.QUEUED, nowIso) as any;
+      const row = findStmt.get(EventState.QUEUED, nowIso);
 
       if (!row) {
         return null;
@@ -125,29 +126,33 @@ export class EventRepository {
     const stmt = this.db.prepare(`
       UPDATE events
       SET state = ?, updatedAt = ?
-      WHERE state = ?
+      WHERE state IN (?, ?)
     `);
-    const result = stmt.run(EventState.QUEUED, now.toISOString(), EventState.PROCESSING);
+    const result = stmt.run(EventState.QUEUED, now.toISOString(), EventState.PROCESSING, EventState.RECEIVED);
     return Number(result.changes);
   }
 
   listAll(): Event[] {
     const stmt = this.db.prepare('SELECT * FROM events ORDER BY createdAt ASC');
-    const rows = stmt.all() as any[];
+    const rows = stmt.all();
     return rows.map((r) => this.mapRowToEvent(r));
   }
 
-  private mapRowToEvent(row: any): Event {
+  private mapRowToEvent(row: DatabaseRow): Event {
+    const payload: unknown = JSON.parse(textColumn(row, 'payload'));
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      throw new Error('Invalid stored event payload');
+    }
     return {
-      id: row.id,
-      eventId: row.eventId,
-      type: row.type,
-      occurredAt: row.occurredAt,
-      payload: typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload,
-      state: row.state as EventState,
-      nextRetryAt: row.nextRetryAt || null,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
+      id: textColumn(row, 'id'),
+      eventId: textColumn(row, 'eventId'),
+      type: textColumn(row, 'type'),
+      occurredAt: textColumn(row, 'occurredAt'),
+      payload: payload as Record<string, unknown>,
+      state: enumColumn(row, 'state', Object.values(EventState)),
+      nextRetryAt: nullableTextColumn(row, 'nextRetryAt'),
+      createdAt: textColumn(row, 'createdAt'),
+      updatedAt: textColumn(row, 'updatedAt'),
     };
   }
 }

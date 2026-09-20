@@ -6,11 +6,12 @@
   "main": "src/index.ts",
   "scripts": {
     "test": "node --no-warnings --experimental-strip-types --test 'tests/*.test.ts' 'tests/*/*.test.ts'",
-    "build": "node --no-warnings --experimental-strip-types -e \"console.log('Type & runtime check ready')\"",
+    "build": "npm run typecheck",
     "start:server": "node --no-warnings --experimental-strip-types src/index.ts",
     "start:receiver": "node --no-warnings --experimental-strip-types src/demo/receiver.ts",
     "db:migrate": "node --no-warnings --experimental-strip-types src/database/migrate.ts",
-    "demo": "bash scripts/demo.sh"
+    "demo": "bash scripts/demo.sh",
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [
     "webhook",
@@ -19,6 +20,12 @@
     "reliability"
   ],
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "24.13.6",
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=24"
+  }
 }
-

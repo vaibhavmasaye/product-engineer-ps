@@ -1,3 +1,4 @@
+import type { CreateEventInput } from '../repositories/EventRepository.ts';
 import type { HttpTransport, HttpDeliveryResult } from './HttpTransport.ts';
 
 export class RealHttpTransport implements HttpTransport {
@@ -7,7 +8,7 @@ export class RealHttpTransport implements HttpTransport {
     this.timeoutMs = timeoutMs;
   }
 
-  async deliver(url: string, payload: any): Promise<HttpDeliveryResult> {
+  async deliver(url: string, payload: CreateEventInput): Promise<HttpDeliveryResult> {
     try {
       const response = await fetch(url, {
         method: 'POST',
@@ -31,7 +32,7 @@ export class RealHttpTransport implements HttpTransport {
         headers: headersRecord,
         error: null,
       };
-    } catch (err: any) {
+    } catch (err: unknown) {
       return {
         statusCode: null,
         body: null,

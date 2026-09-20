@@ -1,6 +1,8 @@
+import { type DatabaseRow, textColumn, nullableTextColumn, numberColumn, enumColumn } from '../database/row.ts';
 import * as crypto from 'node:crypto';
 import { Database, getDatabase } from '../database/index.ts';
 import { type DeliveryAttempt, Outcome } from '../entities/DeliveryAttempt.ts';
+import type { Event } from '../entities/Event.ts';
 
 export interface CreateAttemptInput {
   eventId: string;
@@ -59,6 +61,32 @@ export class AttemptRepository {
     };
   }
 
+  /** Persist the immutable attempt and resulting event state in one transaction. */
+  createAndSaveEvent(input: CreateAttemptInput, event: Event, now: Date = new Date()): DeliveryAttempt {
+    const attempt = this.createRecord(input, now);
+    this.db.transaction(() => {
+      this.insertRecord(attempt);
+      const stmt = this.db.prepare(`UPDATE events SET state = ?, nextRetryAt = ?, updatedAt = ? WHERE id = ?`);
+      stmt.run(event.state, event.nextRetryAt ?? null, event.updatedAt, event.id);
+    });
+    return attempt;
+  }
+
+  private createRecord(input: CreateAttemptInput, now: Date): DeliveryAttempt {
+    return { id: crypto.randomUUID(), eventId: input.eventId, attempt_number: input.attempt_number,
+      started_at: input.started_at, completed_at: input.completed_at ?? null,
+      http_status_code: input.http_status_code ?? null, error_type: input.error_type ?? null,
+      outcome: input.outcome, response_body: input.response_body ?? null, createdAt: now.toISOString() };
+  }
+
+  private insertRecord(attempt: DeliveryAttempt): void {
+    this.db.prepare(`INSERT INTO delivery_attempts
+      (id, eventId, attempt_number, started_at, completed_at, http_status_code, error_type, outcome, response_body, createdAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      attempt.id, attempt.eventId, attempt.attempt_number, attempt.started_at, attempt.completed_at ?? null,
+      attempt.http_status_code ?? null, attempt.error_type ?? null, attempt.outcome, attempt.response_body ?? null, attempt.createdAt);
+  }
+
   getByEventId(eventId: string): DeliveryAttempt[] {
     const stmt = this.db.prepare(`
       SELECT * FROM delivery_attempts
@@ -66,7 +94,7 @@ export class AttemptRepository {
       ORDER BY attempt_number ASC
     `);
 
-    const rows = stmt.all(eventId) as any[];
+    const rows = stmt.all(eventId);
     return rows.map((r) => this.mapRowToAttempt(r));
   }
 
@@ -78,7 +106,7 @@ export class AttemptRepository {
       LIMIT 1
     `);
 
-    const row = stmt.get(eventId) as any;
+    const row = stmt.get(eventId);
     return row ? this.mapRowToAttempt(row) : null;
   }
 
@@ -87,18 +115,18 @@ export class AttemptRepository {
     return (last?.attempt_number ?? 0) + 1;
   }
 
-  private mapRowToAttempt(row: any): DeliveryAttempt {
+  private mapRowToAttempt(row: DatabaseRow): DeliveryAttempt {
     return {
-      id: row.id,
-      eventId: row.eventId,
-      attempt_number: Number(row.attempt_number),
-      started_at: row.started_at,
-      completed_at: row.completed_at || null,
-      http_status_code: row.http_status_code !== null ? Number(row.http_status_code) : null,
-      error_type: row.error_type || null,
-      outcome: row.outcome as Outcome,
-      response_body: row.response_body || null,
-      createdAt: row.createdAt,
+      id: textColumn(row, 'id'),
+      eventId: textColumn(row, 'eventId'),
+      attempt_number: numberColumn(row, 'attempt_number'),
+      started_at: textColumn(row, 'started_at'),
+      completed_at: nullableTextColumn(row, 'completed_at'),
+      http_status_code: row.http_status_code === null ? null : numberColumn(row, 'http_status_code'),
+      error_type: nullableTextColumn(row, 'error_type'),
+      outcome: enumColumn(row, 'outcome', Object.values(Outcome)),
+      response_body: nullableTextColumn(row, 'response_body'),
+      createdAt: textColumn(row, 'createdAt'),
     };
   }
 }

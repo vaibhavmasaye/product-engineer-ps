@@ -1,7 +1,8 @@
-export interface ValidationResult {
-  valid: boolean;
-  errors: string[];
-}
+import type { CreateEventInput } from '../repositories/EventRepository.ts';
+
+export type ValidationResult =
+  | { valid: true; errors: []; event: CreateEventInput }
+  | { valid: false; errors: string[] };
 
 export class ValidationError extends Error {
   public errors: string[];
@@ -14,12 +15,14 @@ export class ValidationError extends Error {
 }
 
 export class EventValidator {
-  static validate(rawEvent: any): ValidationResult {
+  static validate(input: unknown): ValidationResult {
     const errors: string[] = [];
 
-    if (!rawEvent || typeof rawEvent !== 'object' || Array.isArray(rawEvent)) {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
       return { valid: false, errors: ['Request body must be a valid JSON object'] };
     }
+
+    const rawEvent = input as Record<string, unknown>;
 
     if (typeof rawEvent.eventId !== 'string' || !rawEvent.eventId.trim()) {
       errors.push('eventId must be a non-empty string');
@@ -46,9 +49,17 @@ export class EventValidator {
       errors.push('payload must be a valid JSON object');
     }
 
+    if (errors.length > 0) return { valid: false, errors };
+    // Each field has been checked above; expose only the validated event contract.
     return {
-      valid: errors.length === 0,
-      errors,
+      valid: true,
+      errors: [],
+      event: {
+        eventId: rawEvent.eventId as string,
+        type: rawEvent.type as string,
+        occurredAt: rawEvent.occurredAt as string,
+        payload: rawEvent.payload as Record<string, unknown>,
+      },
     };
   }
 }

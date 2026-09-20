@@ -7,7 +7,7 @@ import { EventService } from './services/EventService.ts';
 import { EventController } from './controllers/EventController.ts';
 import { HttpServer } from './http/server.ts';
 import { RealHttpTransport } from './transport/RealHttpTransport.ts';
-import { RetryPolicy } from './services/RetryPolicy.ts';
+import { loadConfig } from './config/loadConfig.ts';
 import { DeliveryWorker } from './workers/DeliveryWorker.ts';
 import { SystemClock } from './utils/SystemClock.ts';
 
@@ -34,10 +34,7 @@ function loadEnv(): void {
 
 loadEnv();
 
-const port = parseInt(process.env.PORT || '8000', 10);
-const webhookUrl = process.env.WEBHOOK_URL || 'http://localhost:3001/webhook';
-const dbPath = process.env.DATABASE_PATH || './data/engine.db';
-const pollIntervalMs = parseInt(process.env.WORKER_POLL_INTERVAL_MS || '1000', 10);
+const { port, webhookUrl, dbPath, pollIntervalMs, retryPolicy } = loadConfig();
 
 console.log('==============================================');
 console.log('Starting Webhook Retry Engine...');
@@ -66,13 +63,6 @@ const server = new HttpServer(controller, port);
 
 // Initialize worker
 const transport = new RealHttpTransport();
-const retryPolicy = new RetryPolicy({
-  maxAttempts: parseInt(process.env.RETRY_MAX_ATTEMPTS || '5', 10),
-  initialDelayMs: parseInt(process.env.RETRY_INITIAL_DELAY_MS || '5000', 10),
-  maxDelayMs: parseInt(process.env.RETRY_MAX_DELAY_MS || '300000', 10),
-  jitterPercent: parseFloat(process.env.RETRY_JITTER_PERCENT || '0.1'),
-});
-
 const worker = new DeliveryWorker(
   eventRepository,
   attemptRepository,

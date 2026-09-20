@@ -18,7 +18,7 @@ export class HttpServer {
     const method = (req.method || 'GET').toUpperCase();
 
     // Parse JSON body for POST/PUT requests
-    let body: any = undefined;
+    let body: unknown = undefined;
     if (method === 'POST' || method === 'PUT') {
       try {
         const buffers: Buffer[] = [];

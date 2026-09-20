@@ -1,3 +1,5 @@
+import type { Event } from '../entities/Event.ts';
+import type { DeliveryAttempt } from '../entities/DeliveryAttempt.ts';
 import { EventService } from '../services/EventService.ts';
 import { AttemptRepository } from '../repositories/AttemptRepository.ts';
 import { ValidationError } from '../validators/EventValidator.ts';
@@ -5,15 +7,21 @@ import { ValidationError } from '../validators/EventValidator.ts';
 export interface HttpRequest {
   method: string;
   url: string;
-  body?: any;
+  body?: unknown;
   params: Record<string, string>;
 }
 
-export interface HttpResponse {
-  status: number;
+export interface HttpResponse<T = unknown, S extends number = number> {
+  status: S;
   headers: Record<string, string>;
-  body: any;
+  body: T;
 }
+
+type ErrorBody = { error: string; details?: string[]; message?: string };
+type EventSummary = Pick<Event, 'id' | 'eventId' | 'type' | 'state' | 'createdAt' | 'updatedAt'> & { isDuplicate: boolean };
+type AttemptSummary = Pick<DeliveryAttempt, 'attempt_number' | 'started_at' | 'completed_at' | 'http_status_code' | 'outcome' | 'error_type'>;
+type CreateResponse = HttpResponse<EventSummary, 200 | 201> | HttpResponse<ErrorBody, 400 | 500>;
+type GetResponse = HttpResponse<Event, 200> | HttpResponse<ErrorBody, 404>;
 
 export class EventController {
   private eventService: EventService;
@@ -24,7 +32,7 @@ export class EventController {
     this.attemptRepository = attemptRepository;
   }
 
-  async create(req: HttpRequest): Promise<HttpResponse> {
+  async create(req: HttpRequest): Promise<CreateResponse> {
     try {
       const result = await this.eventService.ingest(req.body);
       const status = result.isDuplicate ? 200 : 201;
@@ -59,13 +67,13 @@ export class EventController {
         headers: { 'Content-Type': 'application/json' },
         body: {
           error: 'Internal server error',
-          message: (err as Error).message,
+          message: err instanceof Error ? err.message : 'Unknown error',
         },
       };
     }
   }
 
-  async get(req: HttpRequest): Promise<HttpResponse> {
+  async get(req: HttpRequest): Promise<GetResponse> {
     const eventId = req.params.eventId;
     const event = this.eventService.getEvent(eventId);
 
@@ -94,7 +102,7 @@ export class EventController {
     };
   }
 
-  async getAttempts(req: HttpRequest): Promise<HttpResponse> {
+  async getAttempts(req: HttpRequest): Promise<HttpResponse<AttemptSummary[], 200>> {
     const eventId = req.params.eventId;
     const attempts = this.attemptRepository.getByEventId(eventId);
 

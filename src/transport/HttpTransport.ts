@@ -1,3 +1,4 @@
+import type { CreateEventInput } from '../repositories/EventRepository.ts';
 export interface HttpDeliveryResult {
   statusCode?: number | null;
   body?: string | null;
@@ -6,6 +7,6 @@ export interface HttpDeliveryResult {
 }
 
 export interface HttpTransport {
-  deliver(url: string, payload: any): Promise<HttpDeliveryResult>;
+  deliver(url: string, payload: CreateEventInput): Promise<HttpDeliveryResult>;
 }
 

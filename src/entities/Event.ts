@@ -5,7 +5,7 @@ export interface Event {
   eventId: string;
   type: string;
   occurredAt: string;
-  payload: Record<string, any>;
+  payload: Record<string, unknown>;
   state: EventState;
   nextRetryAt?: string | null;
   createdAt: string;

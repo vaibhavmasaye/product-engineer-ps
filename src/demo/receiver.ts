@@ -1,13 +1,15 @@
 import * as http from 'node:http';
 
-const port = parseInt(process.env.RECEIVER_PORT || '3001', 10);
+import { receiverPort } from '../config/loadConfig.ts';
+
+const port = receiverPort();
 
 interface DeliveryLog {
   eventId: string;
   attemptNumberForEvent: number;
   time: string;
   statusCode: number;
-  payload: any;
+  payload: unknown;
 }
 
 const deliveryLogs: DeliveryLog[] = [];
@@ -28,8 +30,8 @@ const server = http.createServer(async (req, res) => {
   // Mode control endpoint
   if (pathname === '/mode' && method === 'POST') {
     const qMode = parsedUrl.searchParams.get('set');
-    if (qMode && ['normal', 'fail_once', 'always_fail_503', 'terminal_400'].includes(qMode)) {
-      mode = qMode as any;
+    if (qMode === 'normal' || qMode === 'fail_once' || qMode === 'always_fail_503' || qMode === 'terminal_400') {
+      mode = qMode;
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ status: 'mode_updated', currentMode: mode }));
       return;
@@ -63,14 +65,15 @@ const server = http.createServer(async (req, res) => {
       bodyText += chunk.toString();
     }
 
-    let parsedBody: any = {};
+    let parsedBody: unknown = {};
     try {
       if (bodyText) parsedBody = JSON.parse(bodyText);
     } catch {
       // ignore
     }
 
-    const eventId = parsedBody.eventId || 'unknown';
+    const eventId = parsedBody && typeof parsedBody === 'object' && 'eventId' in parsedBody
+      && typeof parsedBody.eventId === 'string' ? parsedBody.eventId : 'unknown';
     const attempt = (eventAttemptCounts.get(eventId) || 0) + 1;
     eventAttemptCounts.set(eventId, attempt);
 
@@ -79,7 +82,12 @@ const server = http.createServer(async (req, res) => {
     let responseStatus = 200;
 
     if (overrideStatus) {
-      responseStatus = parseInt(overrideStatus, 10);
+      responseStatus = Number(overrideStatus);
+      if (!Number.isInteger(responseStatus) || responseStatus < 200 || responseStatus > 599) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'status must be an integer between 200 and 599' }));
+        return;
+      }
     } else if (mode === 'fail_once') {
       responseStatus = attempt === 1 ? 503 : 200;
     } else if (mode === 'always_fail_503') {

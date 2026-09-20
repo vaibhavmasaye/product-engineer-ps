@@ -28,6 +28,12 @@ npm run start:server
 # Listening on http://localhost:8000
 ```
 
+### Configuration
+
+Defaults work without an environment file. To customize them, copy `.env.example` to `.env` for the engine, or export the variables in your shell. The receiver reads `RECEIVER_PORT` from its shell environment.
+
+Startup validates configuration before opening the engine database or starting its HTTP server: ports must be integers from 1–65535; polling must be a positive integer; retry attempts must be a positive safe integer; retry delays must be nonnegative integer milliseconds with maximum delay at least the initial delay; jitter must be between 0 and 1. Polling and delay settings cannot exceed 2,147,483,647 milliseconds. The webhook destination must be an absolute HTTP(S) URL without embedded credentials, and the database path must be nonempty. Invalid values produce an error instead of silently using a partial number or fallback.
+
 ### Triggering Acceptance Scenarios
 
 #### AC1: Successful Delivery
@@ -118,10 +124,12 @@ npm run demo
 ## Run the tests
 
 ```bash
+npm ci
+npm run build  # Runs tsc --noEmit; checks source and test types without generating files
 npm test
 ```
 
-Executes 25 automated, deterministic tests across AC1–AC5, classification matrices, state machines, concurrency locks, and crash recovery in ~240ms with zero network calls and zero real-time sleeps.
+Executes 31 automated, deterministic tests across AC1–AC5, classification matrices, state machines, concurrency locks, configuration validation, and crash recovery in ~240ms with zero network calls and zero real-time sleeps.
 
 ---
 
@@ -164,7 +172,7 @@ Executes 25 automated, deterministic tests across AC1–AC5, classification matr
 ### Core Components
 1. **EventService**: Enforces schema validation (`EventValidator`) and coordinates idempotent ingestion via `EventRepository.findOrCreate()`. Ensures duplicate submissions reference the existing event and do not spawn duplicate delivery jobs.
 2. **EventState Machine**: Explicit state machine with strict transitions: `RECEIVED -> QUEUED -> PROCESSING -> SUCCESS | FAILED`, with retry loop `PROCESSING -> QUEUED`.
-3. **DeliveryWorker**: Background worker claiming queued events whose `nextRetryAt <= now`. Uses an atomic transaction for mutual exclusion to prevent duplicate processing.
+3. **DeliveryWorker**: Background worker claiming queued events whose `nextRetryAt <= now`. Uses an atomic transaction for mutual exclusion, and commits each immutable attempt together with its resulting event state.
 4. **RetryClassifier**: Deterministic classification matrix:
    - `2xx` $\to$ `SUCCESS`
    - `408`, `429` $\to$ `RETRYABLE`
@@ -181,7 +189,7 @@ Executes 25 automated, deterministic tests across AC1–AC5, classification matr
 
 - **Language & Runtime:** TypeScript on Node.js v24.
   - *Why:* Node.js 24 provides native TypeScript stripping (`--experimental-strip-types`), native SQLite (`node:sqlite` via `DatabaseSync`), native test runner (`node:test`), and native `fetch` / `crypto.randomUUID()`.
-  - *Alternatives considered:* Python (FastAPI + SQLAlchemy) or Go. TypeScript was selected because it allows zero external dependency installation while providing strong typing and fast deterministic in-memory execution.
+  - *Alternatives considered:* Python (FastAPI + SQLAlchemy) or Go. TypeScript was selected because it allows zero runtime dependencies and fast deterministic in-memory execution. Development checks use pinned TypeScript and Node type definitions installed with `npm ci`.
   - *Trade-offs:* Using type-stripping requires avoiding TypeScript `enum` in favor of `as const` object unions and explicit `import type` annotations. This is a cleaner, more standard modern TS practice anyway.
 - **Database:** SQLite with native transactions and foreign keys.
   - *Why:* Zero configuration for reviewers, fast in-memory execution for unit tests (`:memory:`), and identical constraint semantics (unique indexes, foreign keys, transactions) as PostgreSQL.
@@ -196,10 +204,10 @@ Executes 25 automated, deterministic tests across AC1–AC5, classification matr
    - *Rationale:* Application-level checks (`if (!exists) insert()`) suffer from race conditions under concurrent submissions. Relying on the database constraint guarantees strict atomicity and mutual exclusion without distributed locking complexity.
 2. **Injectable Time & Transport Abstractions (`Clock` and `HttpTransport`):**
    - *Decision:* All time-dependent scheduling and network transport depend on `Clock` (`SystemClock` / `MockClock`) and `HttpTransport` (`RealHttpTransport` / `FakeHttpTransport`).
-   - *Rationale:* Eliminates flaky test sleep delays. The entire 25-test suite executes in ~240ms while verifying realistic exponential backoff, retry boundaries, and network errors.
+   - *Rationale:* Eliminates flaky test sleep delays. The entire 31-test suite executes in ~240ms while verifying realistic exponential backoff, retry boundaries, and network errors.
 3. **Crash recovery with stranded `PROCESSING` reclamation:**
    - *Decision:* On startup, the service runs `recoverStrandedProcessingEvents()`, safely transitioning stranded `PROCESSING` records back to `QUEUED`.
-   - *Rationale:* If the worker process crashes during an HTTP flight or before saving state, events are not lost or stuck in limbo; delivery is safely resumed upon restart under at-least-once semantics.
+   - *Rationale:* If the worker process crashes during an HTTP flight, delivery is safely resumed under at-least-once semantics. Attempt insertion and the resulting state transition are committed atomically, while stranded `RECEIVED` and `PROCESSING` records are re-queued on startup.
 
 ---
 
@@ -208,6 +216,7 @@ Executes 25 automated, deterministic tests across AC1–AC5, classification matr
 - **Delivery Guarantees:** Delivery across an external HTTP boundary is **at-least-once**. In the event of a worker crash after the receiver returns HTTP 200 but before the attempt is logged in DB, the event will be re-attempted on restart. Receivers should treat delivery idempotently using the provided stable `eventId`.
 - **Single Webhook Destination:** Designed per Problem 2 brief for a single configured webhook endpoint.
 - **Single Process Worker:** Designed as a single worker process with database-level claim locking. Production scaling to multiple workers is outlined below.
+- **Crash boundary:** A process crash during an in-flight HTTP request can still cause a duplicate after restart; exactly-once delivery across an external HTTP boundary is impossible. Receivers should deduplicate by `eventId`.
 
 ---
 
@@ -232,7 +241,7 @@ If this prototype needed to operate in production at significantly greater scale
   - Generated initial test matrix and failure scenarios against the prompt specifications.
   - Implemented unit tests, schemas, and controllers based on the established architecture doc.
   - Reviewed and verified test coverage and edge cases.
-  - Used Codex to review the project against the submission requirements, fix retry classification for nested native `fetch` error causes, add regression tests, and update the submission instructions.
+  - Used Codex to review the project against the submission requirements, fix retry classification for nested native `fetch` error causes, add regression tests, update the submission instructions, replace untyped values with validated types, add configuration validation and a real TypeScript check, and harden crash recovery with atomic attempt/state commits.
 
 ---
 

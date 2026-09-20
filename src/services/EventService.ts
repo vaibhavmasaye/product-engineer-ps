@@ -18,7 +18,7 @@ export class EventService {
     this.clock = clock;
   }
 
-  async ingest(rawEvent: any): Promise<IngestResult> {
+  async ingest(rawEvent: unknown): Promise<IngestResult> {
     // 1. Schema validation
     const validation = EventValidator.validate(rawEvent);
     if (!validation.valid) {
@@ -29,12 +29,7 @@ export class EventService {
 
     // 2. Find or create in repository
     const { event, created } = this.repository.findOrCreate(
-      {
-        eventId: rawEvent.eventId,
-        type: rawEvent.type,
-        occurredAt: rawEvent.occurredAt,
-        payload: rawEvent.payload,
-      },
+      validation.event,
       now
     );
 
