@@ -23,42 +23,9 @@ export class AttemptRepository {
   }
 
   create(input: CreateAttemptInput, now: Date = new Date()): DeliveryAttempt {
-    const id = crypto.randomUUID();
-    const createdAt = now.toISOString();
-
-    const stmt = this.db.prepare(`
-      INSERT INTO delivery_attempts (
-        id, eventId, attempt_number, started_at, completed_at,
-        http_status_code, error_type, outcome, response_body, createdAt
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    stmt.run(
-      id,
-      input.eventId,
-      input.attempt_number,
-      input.started_at,
-      input.completed_at ?? null,
-      input.http_status_code ?? null,
-      input.error_type ?? null,
-      input.outcome,
-      input.response_body ?? null,
-      createdAt
-    );
-
-    return {
-      id,
-      eventId: input.eventId,
-      attempt_number: input.attempt_number,
-      started_at: input.started_at,
-      completed_at: input.completed_at ?? null,
-      http_status_code: input.http_status_code ?? null,
-      error_type: input.error_type ?? null,
-      outcome: input.outcome,
-      response_body: input.response_body ?? null,
-      createdAt,
-    };
+    const attempt = this.createRecord(input, now);
+    this.db.transaction(() => this.insertRecord(attempt));
+    return attempt;
   }
 
   /** Persist the immutable attempt and resulting event state in one transaction. */
