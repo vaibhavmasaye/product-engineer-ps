@@ -64,7 +64,19 @@ export class DeliveryWorker {
     };
 
     // Attempt delivery via HTTP transport
-    const result = await this.transport.deliver(this.webhookUrl, deliveryPayload);
+    let result;
+    try {
+      result = await this.transport.deliver(this.webhookUrl, deliveryPayload);
+    } catch (error: unknown) {
+      // A transport implementation may reject instead of returning a result.
+      // Convert that failure into the same durable retry path as fetch errors.
+      result = {
+        statusCode: null,
+        body: null,
+        headers: {},
+        error: error instanceof Error ? error : new Error(String(error)),
+      };
+    }
     const endTime = this.clock.now();
 
     // Classify outcome
