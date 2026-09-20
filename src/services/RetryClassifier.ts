@@ -4,43 +4,53 @@ export class RetryClassifier {
   static classify(statusCode?: number | null, error?: Error | null): Outcome {
     // 1. Handle network/transport-level errors
     if (error) {
-      const msg = (error.message || '').toLowerCase();
-      const code = ((error as any).code || '').toLowerCase();
-      const name = (error.name || '').toLowerCase();
+      // Native fetch wraps network errors in TypeError('fetch failed').
+      // Inspect causes too, guarding against malformed or cyclic cause chains.
+      const seen = new Set<object>();
+      let cause: unknown = error;
+      while (cause !== null && typeof cause === 'object' && !seen.has(cause)) {
+        seen.add(cause);
+        const current = cause as { message?: unknown; code?: unknown; name?: unknown; cause?: unknown };
+        const msg = typeof current.message === 'string' ? current.message.toLowerCase() : '';
+        const code = typeof current.code === 'string' ? current.code.toLowerCase() : '';
+        const name = typeof current.name === 'string' ? current.name.toLowerCase() : '';
 
-      if (
-        msg.includes('econnrefused') ||
-        code.includes('econnrefused') ||
-        msg.includes('connection refused')
-      ) {
-        return Outcome.RETRYABLE;
-      }
+        if (
+          msg.includes('econnrefused') ||
+          code.includes('econnrefused') ||
+          msg.includes('connection refused')
+        ) {
+          return Outcome.RETRYABLE;
+        }
 
-      if (
-        msg.includes('econnreset') ||
-        code.includes('econnreset') ||
-        msg.includes('connection reset')
-      ) {
-        return Outcome.RETRYABLE;
-      }
+        if (
+          msg.includes('econnreset') ||
+          code.includes('econnreset') ||
+          msg.includes('connection reset')
+        ) {
+          return Outcome.RETRYABLE;
+        }
 
-      if (
-        msg.includes('enotfound') ||
-        code.includes('enotfound') ||
-        msg.includes('getaddrinfo') ||
-        msg.includes('dns')
-      ) {
-        return Outcome.RETRYABLE;
-      }
+        if (
+          msg.includes('enotfound') ||
+          code.includes('enotfound') ||
+          msg.includes('getaddrinfo') ||
+          msg.includes('dns')
+        ) {
+          return Outcome.RETRYABLE;
+        }
 
-      if (
-        msg.includes('etimedout') ||
-        code.includes('etimedout') ||
-        msg.includes('timeout') ||
-        name.includes('timeouterror') ||
-        name.includes('aborterror')
-      ) {
-        return Outcome.RETRYABLE;
+        if (
+          msg.includes('etimedout') ||
+          code.includes('etimedout') ||
+          msg.includes('timeout') ||
+          name.includes('timeouterror') ||
+          name.includes('aborterror')
+        ) {
+          return Outcome.RETRYABLE;
+        }
+
+        cause = current.cause;
       }
 
       // Safe default for unclassified network exceptions

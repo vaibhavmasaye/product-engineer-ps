@@ -6,7 +6,7 @@
 - **Email:** masayevaibhav@gmail.com
 - **GitHub:** https://github.com/vaibhavmasaye/product-engineer-ps
 - **Selected problem:** Problem 2 — Webhook Retry Engine
-- **Demo video:** https://drive.google.com/file/d/19UbdlhIzQxObX88c2XWEhWYEnFjxDaav/view?usp=sharing(3–5 min video walkthrough of AC1–AC5)
+- **Demo video:** https://drive.google.com/file/d/19UbdlhIzQxObX88c2XWEhWYEnFjxDaav/view?usp=sharing
 
 ---
 

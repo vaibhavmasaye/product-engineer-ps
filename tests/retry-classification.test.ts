@@ -53,10 +53,31 @@ test('RetryClassifier: Network-level errors are RETRYABLE', () => {
   assert.strictEqual(RetryClassifier.classify(null, errAbort), Outcome.RETRYABLE);
 });
 
+test('RetryClassifier: fetch errors with nested network causes are RETRYABLE', () => {
+  for (const code of ['ECONNREFUSED', 'ECONNRESET', 'ENOTFOUND', 'ETIMEDOUT']) {
+    const cause = Object.assign(new Error('Network failure'), { code });
+    const error = new TypeError('fetch failed', { cause });
+    assert.strictEqual(RetryClassifier.classify(null, error), Outcome.RETRYABLE, code);
+    const wrapped = new Error('Transport failure', { cause: error });
+    assert.strictEqual(RetryClassifier.classify(null, wrapped), Outcome.RETRYABLE, code);
+  }
+});
+
+test('RetryClassifier: unknown, malformed and cyclic causes remain TERMINAL', () => {
+  for (const cause of [undefined, null, 'unknown', { code: 123 }, new Error('Protocol mismatch')]) {
+    assert.strictEqual(
+      RetryClassifier.classify(null, new TypeError('fetch failed', { cause })),
+      Outcome.TERMINAL
+    );
+  }
+  const cyclic = new Error('Unknown failure');
+  cyclic.cause = cyclic;
+  assert.strictEqual(RetryClassifier.classify(null, cyclic), Outcome.TERMINAL);
+});
+
 test('RetryClassifier: Unclassified error defaults safely to TERMINAL', () => {
   const errUnknown = new Error('Fatal protocol mismatch');
   assert.strictEqual(RetryClassifier.classify(null, errUnknown), Outcome.TERMINAL);
   assert.strictEqual(RetryClassifier.classify(null, null), Outcome.TERMINAL);
   assert.strictEqual(RetryClassifier.classify(undefined, undefined), Outcome.TERMINAL);
 });
-
