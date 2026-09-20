@@ -8,6 +8,7 @@ import { SystemClock } from '../utils/SystemClock.ts';
 import { EventState, EventTransition } from '../entities/Event.ts';
 import { Outcome } from '../entities/DeliveryAttempt.ts';
 import type { WorkerConfig } from '../models/WorkerConfig.ts';
+import { Metrics } from '../observability/Metrics.ts';
 
 export class DeliveryWorker {
   private eventRepository: EventRepository;
@@ -18,6 +19,7 @@ export class DeliveryWorker {
   private webhookUrl: string;
   private pollIntervalMs: number;
   private running: boolean = false;
+  private metrics: Metrics;
 
   constructor(
     eventRepository: EventRepository,
@@ -25,7 +27,8 @@ export class DeliveryWorker {
     transport: HttpTransport,
     policy: RetryPolicy = new RetryPolicy(),
     clock: Clock = new SystemClock(),
-    config: WorkerConfig = { webhookUrl: process.env.WEBHOOK_URL || 'http://localhost:3001/webhook' }
+    config: WorkerConfig = { webhookUrl: process.env.WEBHOOK_URL || 'http://localhost:3001/webhook' },
+    metrics: Metrics = new Metrics()
   ) {
     this.eventRepository = eventRepository;
     this.attemptRepository = attemptRepository;
@@ -34,6 +37,7 @@ export class DeliveryWorker {
     this.clock = clock;
     this.webhookUrl = config.webhookUrl;
     this.pollIntervalMs = config.pollIntervalMs ?? 1000;
+    this.metrics = metrics;
   }
 
   async claimAndDeliver(): Promise<boolean> {
@@ -81,6 +85,7 @@ export class DeliveryWorker {
 
     // Classify outcome
     const outcome = RetryClassifier.classify(result.statusCode, result.error);
+    this.metrics.recordAttempt(outcome, result.statusCode);
 
     // Record immutable attempt
     let errorDesc: string | null = null;

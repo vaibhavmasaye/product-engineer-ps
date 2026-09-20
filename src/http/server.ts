@@ -5,10 +5,12 @@ export class HttpServer {
   private server: http.Server;
   private controller: EventController;
   private port: number;
+  private metricsText: () => string;
 
-  constructor(controller: EventController, port: number = 8000) {
+  constructor(controller: EventController, port: number = 8000, metricsText: () => string = () => '') {
     this.controller = controller;
     this.port = port;
+    this.metricsText = metricsText;
     this.server = http.createServer(this.handleRequest.bind(this));
   }
 
@@ -46,6 +48,11 @@ export class HttpServer {
         headers: { 'Content-Type': 'application/json' },
         body: { status: 'ok' },
       };
+    }
+    else if (pathname === '/metrics' && method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'text/plain; version=0.0.4' });
+      res.end(this.metricsText());
+      return;
     }
     // POST /events
     else if (pathname === '/events' && method === 'POST') {

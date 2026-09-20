@@ -10,6 +10,7 @@ import { RealHttpTransport } from './transport/RealHttpTransport.ts';
 import { loadConfig } from './config/loadConfig.ts';
 import { DeliveryWorker } from './workers/DeliveryWorker.ts';
 import { SystemClock } from './utils/SystemClock.ts';
+import { Metrics } from './observability/Metrics.ts';
 
 // Simple environment loader if .env exists
 function loadEnv(): void {
@@ -45,6 +46,7 @@ console.log('==============================================');
 
 // Initialize database
 const db = new Database({ dbPath });
+const metrics = new Metrics();
 
 // Initialize repositories & services
 const eventRepository = new EventRepository(db);
@@ -59,7 +61,7 @@ const eventService = new EventService(eventRepository, clock);
 const controller = new EventController(eventService, attemptRepository);
 
 // Initialize HTTP server
-const server = new HttpServer(controller, port);
+const server = new HttpServer(controller, port, () => metrics.renderPrometheus());
 
 // Initialize worker
 const transport = new RealHttpTransport();
@@ -72,7 +74,8 @@ const worker = new DeliveryWorker(
   {
     webhookUrl,
     pollIntervalMs,
-  }
+  },
+  metrics
 );
 
 // Start server and worker
