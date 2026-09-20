@@ -49,7 +49,7 @@ curl http://localhost:8000/events/evt_demo_ac1/attempts
 #### AC2: Temporary Failure and Retry
 ```bash
 # Set receiver to fail on first attempt with 503 then succeed:
-curl -X POST http://localhost:3001/mode?set=fail_once
+curl -X POST "http://localhost:3001/mode?set=fail_once"
 
 # Submit event:
 curl -X POST http://localhost:8000/events \
@@ -68,23 +68,37 @@ curl http://localhost:8000/events/evt_demo_ac2
 curl http://localhost:8000/events/evt_demo_ac2/attempts
 ```
 
-#### AC3: Bounded Failure Exhaustion / Terminal Failure
+#### AC3: Bounded Failure / Attempt Exhaustion
+
+With the default configuration, delivery stops after five attempts. Retry delays are approximately 5, 10, 20, and 40 seconds, plus jitter and worker polling time. Keep the receiver in failure mode until the event reaches `FAILED`.
+
 ```bash
-# Configure receiver to return 400 Bad Request (terminal client error):
-curl -X POST http://localhost:3001/mode?set=terminal_400
+# Configure receiver to return 503 on every attempt:
+curl -X POST "http://localhost:3001/mode?set=always_fail_503"
+
+# Use a fresh event ID so this scenario can be repeated:
+AC3_EVENT_ID="evt_demo_ac3_$(date +%s)"
 
 curl -X POST http://localhost:8000/events \
   -H "Content-Type: application/json" \
-  -d '{
-    "eventId": "evt_demo_ac3",
-    "type": "incident.closed",
-    "occurredAt": "2026-09-17T10:02:00Z",
-    "payload": {"incidentId": "inc_001"}
-  }'
+  -d "{\"eventId\":\"$AC3_EVENT_ID\",\"type\":\"incident.closed\",\"occurredAt\":\"2026-09-17T10:02:00Z\",\"payload\":{\"incidentId\":\"inc_001\"}}"
 
-# State immediately becomes FAILED (no wasted retries):
-curl http://localhost:8000/events/evt_demo_ac3
+# Allow all five attempts to complete with the default retry settings:
+sleep 95
+
+# Expect state FAILED and five ordered attempts, each with HTTP 503:
+curl "http://localhost:8000/events/$AC3_EVENT_ID"
+curl "http://localhost:8000/events/$AC3_EVENT_ID/attempts"
+
+# Confirm no additional attempts occur after exhaustion:
+sleep 10
+curl "http://localhost:8000/events/$AC3_EVENT_ID/attempts"
+
+# Restore the receiver for subsequent scenarios:
+curl -X POST "http://localhost:3001/mode?set=normal"
 ```
+
+HTTP 400 is a separate terminal-failure case: it stops delivery after the first attempt. It does not demonstrate exhaustion of the retry limit.
 
 #### AC4: Idempotent Ingestion
 ```bash
@@ -107,7 +121,7 @@ npm run demo
 npm test
 ```
 
-Executes 23 automated, deterministic tests across AC1–AC5, classification matrices, state machines, concurrency locks, and crash recovery in ~240ms with zero network calls and zero real-time sleeps.
+Executes 25 automated, deterministic tests across AC1–AC5, classification matrices, state machines, concurrency locks, and crash recovery in ~240ms with zero network calls and zero real-time sleeps.
 
 ---
 
@@ -182,7 +196,7 @@ Executes 23 automated, deterministic tests across AC1–AC5, classification matr
    - *Rationale:* Application-level checks (`if (!exists) insert()`) suffer from race conditions under concurrent submissions. Relying on the database constraint guarantees strict atomicity and mutual exclusion without distributed locking complexity.
 2. **Injectable Time & Transport Abstractions (`Clock` and `HttpTransport`):**
    - *Decision:* All time-dependent scheduling and network transport depend on `Clock` (`SystemClock` / `MockClock`) and `HttpTransport` (`RealHttpTransport` / `FakeHttpTransport`).
-   - *Rationale:* Eliminates flaky test sleep delays. The entire 23-test suite executes in ~240ms while verifying realistic exponential backoff, retry boundaries, and network errors.
+   - *Rationale:* Eliminates flaky test sleep delays. The entire 25-test suite executes in ~240ms while verifying realistic exponential backoff, retry boundaries, and network errors.
 3. **Crash recovery with stranded `PROCESSING` reclamation:**
    - *Decision:* On startup, the service runs `recoverStrandedProcessingEvents()`, safely transitioning stranded `PROCESSING` records back to `QUEUED`.
    - *Rationale:* If the worker process crashes during an HTTP flight or before saving state, events are not lost or stuck in limbo; delivery is safely resumed upon restart under at-least-once semantics.
@@ -213,11 +227,12 @@ If this prototype needed to operate in production at significantly greater scale
 
 ## AI usage
 
-- **AI Tools Used:** Google Antigravity / Gemini.
+- **AI Tools Used:** Google Antigravity / Gemini and OpenAI Codex.
 - **Contribution:**
   - Generated initial test matrix and failure scenarios against the prompt specifications.
   - Implemented unit tests, schemas, and controllers based on the established architecture doc.
   - Reviewed and verified test coverage and edge cases.
+  - Used Codex to review the project against the submission requirements, fix retry classification for nested native `fetch` error causes, add regression tests, and update the submission instructions.
 
 ---
 
@@ -227,4 +242,3 @@ If this prototype needed to operate in production at significantly greater scale
 - **Contribution:** Lead backend engineer designing the reliable dispatch service delivering over 15 million webhooks/day to customer API endpoints.
 - **Operational Complexity:** Handled high failure variance across customer endpoints, strict rate-limiting per tenant, and automatic retry backoff without blocking internal event streaming pipelines.
 - **Key Decision:** Moved from in-memory task queues to an outbox pattern with database-backed lease locking (`SKIP LOCKED`) and tenant-level concurrency limits, reducing dropped webhook incidents to zero during customer service outages.
-
