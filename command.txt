@@ -1,0 +1,5 @@
+npm run start:receiver
+
+npm run start:server
+
+npm run demo

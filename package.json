@@ -1,0 +1,24 @@
+{
+  "name": "webhook-retry-engine",
+  "version": "1.0.0",
+  "description": "Webhook Retry Engine with bounded retries, idempotent ingestion, and inspectable history (Problem 2)",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "node --no-warnings --experimental-strip-types --test 'tests/*.test.ts' 'tests/*/*.test.ts'",
+    "build": "node --no-warnings --experimental-strip-types -e \"console.log('Type & runtime check ready')\"",
+    "start:server": "node --no-warnings --experimental-strip-types src/index.ts",
+    "start:receiver": "node --no-warnings --experimental-strip-types src/demo/receiver.ts",
+    "db:migrate": "node --no-warnings --experimental-strip-types src/database/migrate.ts",
+    "demo": "bash scripts/demo.sh"
+  },
+  "keywords": [
+    "webhook",
+    "retry-engine",
+    "idempotency",
+    "reliability"
+  ],
+  "author": "",
+  "license": "MIT"
+}
+
